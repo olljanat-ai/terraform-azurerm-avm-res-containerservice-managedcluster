@@ -64,6 +64,8 @@ module "default_agent_pool_data" {
 # This is in place so we can update the default agent pool, as we ignore changes to the object array in the parent resource.
 # TODO: Remove this when <https://github.com/Azure/terraform-provider-azapi/pull/1033> is merged and released.
 resource "azapi_update_resource" "default_agent_pool" {
+  count = local.manage_default_agent_pool ? 1 : 0
+
   name      = module.default_agent_pool_data.name
   parent_id = azapi_resource.this.id
   type      = "Microsoft.ContainerService/managedClusters/agentpools@2026-01-02-preview"
@@ -111,4 +113,14 @@ resource "azapi_update_resource" "default_agent_pool" {
   update_headers         = var.enable_telemetry ? { "User-Agent" : local.avm_azapi_header } : null
 
   depends_on = [azapi_update_resource.kubernetes_version]
+}
+
+# The write became countable when the default agent pool stopped being sent for AKS Automatic.
+# Without this, every cluster that already manages one has it destroyed and recreated under the new
+# address. The destroy is harmless - an `azapi_update_resource` performs no operation when it is
+# deleted, and the agent pool it wrote to stays as it is - but the create that follows sends the
+# whole pool body to Azure again for no reason.
+moved {
+  from = azapi_update_resource.default_agent_pool
+  to   = azapi_update_resource.default_agent_pool[0]
 }

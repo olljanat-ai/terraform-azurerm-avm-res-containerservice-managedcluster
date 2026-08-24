@@ -539,6 +539,7 @@ Note that:
 - It is not supported to rename the default agent pool after creation.
 - `artifact_streaming_profile` configures artifact streaming on the default agent pool.
 - Updating `vm_size` after creation triggers an AKS-managed rolling resize of the default agent pool. Ensure the subscription has quota for temporary surge capacity and that workloads can tolerate node rotation.
+- On an AKS Automatic cluster this block is ignored, because `default_agent_pool_enabled` defaults to `false` there and AKS manages the system node pool itself.
 DESCRIPTION
   nullable    = false
 
@@ -546,6 +547,21 @@ DESCRIPTION
     condition     = try(var.default_agent_pool.kubelet_config == null || var.default_agent_pool.kubelet_config.seccomp_default == null, true)
     error_message = "default_agent_pool.kubelet_config.seccomp_default is not supported because the managedClusters parent API rejects it and the default agent pool child API treats kubelet configuration as immutable after creation. Use agent_pools[*].kubelet_config.seccomp_default for user pools."
   }
+}
+
+variable "default_agent_pool_enabled" {
+  type        = bool
+  default     = null
+  description = <<DESCRIPTION
+Whether this module manages the cluster's default agent pool - the `agentPoolProfiles` entry of the create request, and the follow-up write to the agent pool child resource that keeps it up to date.
+
+Leave this unset to let the SKU decide, which is what you want in nearly every case:
+
+- On an AKS Automatic cluster the default is `false`. AKS provisions, scales and patches the system node pool itself and creates every workload node pool through node autoprovisioning, so a default agent pool sent from here only adds a `systempool` next to the one AKS already runs.
+- On every other SKU the default is `true`, because a cluster with no system pool of its own has nowhere to run.
+
+Set it to `true` on an Automatic cluster only to keep managing a `systempool` that an earlier version of this module created; set it to `false` elsewhere only if the pool is managed outside this module.
+DESCRIPTION
 }
 
 variable "diagnostic_settings" {
@@ -676,20 +692,25 @@ variable "hosted_system_profile" {
   })
   default     = null
   description = <<DESCRIPTION
-Hosted system profile for the managed cluster. Used by AKS Automatic clusters provisioned into a customer-owned (BYO) virtual network to declare the subnets that the hosted system components use.
+Hosted system profile for the managed cluster. AKS then runs the cluster's system components on a system node pool it provisions, scales and patches itself, rather than on one in your subscription - and no `systempool` is created for you to manage.
 
 - `enabled` - Whether to enable the hosted system profile.
-- `node_subnet_id` - Resource ID of the subnet to be used for user/workload nodes. Required when `enabled` is true.
-- `system_node_subnet_id` - Resource ID of the subnet to be used for system node pools. Required when `enabled` is true.
+- `node_subnet_id` - Resource ID of the subnet to be used for user/workload nodes. Set it on a cluster in an existing (BYO) virtual network, alongside `system_node_subnet_id`; leave it null on a cluster using the network AKS manages.
+- `system_node_subnet_id` - Resource ID of the subnet to be used for system node pools. It must be a different subnet from `node_subnet_id`, and the two are set or left null together.
+
+This is a creation-time setting: Azure will not turn it on or off on a cluster that already exists.
 
 This property is only honored by AKS Automatic clusters (`sku.name == "Automatic"`); it is ignored for standard clusters.
 DESCRIPTION
 
+  # The subnets come in pairs or not at all. A cluster on the network AKS manages names neither -
+  # Azure reports both as null - while one on an existing network has to name both, because the
+  # hosted system components and the workload nodes land in different subnets of it.
   validation {
     condition = try(var.hosted_system_profile == null || var.hosted_system_profile.enabled != true || (
-      var.hosted_system_profile.node_subnet_id != null && var.hosted_system_profile.system_node_subnet_id != null
+      (var.hosted_system_profile.node_subnet_id != null) == (var.hosted_system_profile.system_node_subnet_id != null)
     ), true)
-    error_message = "When hosted_system_profile.enabled is true, both hosted_system_profile.node_subnet_id and hosted_system_profile.system_node_subnet_id must be set."
+    error_message = "hosted_system_profile.node_subnet_id and hosted_system_profile.system_node_subnet_id must either both be set, for a cluster in an existing virtual network, or both be left null, for a cluster on the network AKS manages."
   }
   validation {
     condition     = try(var.hosted_system_profile == null || (var.sku != null && var.sku.name == "Automatic"), true)

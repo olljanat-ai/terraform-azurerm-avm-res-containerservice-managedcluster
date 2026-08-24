@@ -9,9 +9,14 @@ resource "azapi_resource" "this" {
   delete_headers       = var.enable_telemetry ? { "User-Agent" : local.avm_azapi_header } : null
   ignore_null_property = true
   read_headers         = var.enable_telemetry ? { "User-Agent" : local.avm_azapi_header } : null
-  replace_triggers_refs = [
+  # Moving the default pool to another subnet is a rebuild of the cluster rather than an update, so
+  # it is watched here. A cluster whose default pool this module does not manage sends no
+  # agentPoolProfiles at all, and there is nothing at that path to watch.
+  replace_triggers_refs = local.manage_default_agent_pool ? [
     "properties.nodeResourceGroup",
     "properties.agentPoolProfiles[0].vnetSubnetID",
+    ] : [
+    "properties.nodeResourceGroup",
   ]
   response_export_values = [
     "properties.addonProfiles.ingressApplicationGateway.identity",

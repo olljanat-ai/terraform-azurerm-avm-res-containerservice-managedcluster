@@ -26,7 +26,7 @@ locals {
         tenantID            = var.aad_profile.tenant_id
       }
       addonProfiles     = local.addon_profiles
-      agentPoolProfiles = local.agent_pool_profiles
+      agentPoolProfiles = local.manage_default_agent_pool ? local.agent_pool_profiles : null
       aiToolchainOperatorProfile = var.ai_toolchain_operator_profile == null ? null : {
         enabled = var.ai_toolchain_operator_profile.enabled
       }

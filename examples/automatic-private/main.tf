@@ -159,9 +159,8 @@ module "automatic" {
     private_dns_zone       = azurerm_private_dns_zone.this.id
     disable_run_command    = true
   }
-  default_agent_pool = {
-    vnet_subnet_id = azurerm_subnet.cluster.id
-  }
+  # No default_agent_pool: on an AKS Automatic cluster the system node pool is AKS's own, and the
+  # subnets the cluster uses are named by hosted_system_profile below.
   hosted_system_profile = {
     enabled               = true
     node_subnet_id        = azurerm_subnet.cluster.id

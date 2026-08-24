@@ -863,6 +863,7 @@ Note that:
 - It is not supported to rename the default agent pool after creation.
 - `artifact_streaming_profile` configures artifact streaming on the default agent pool.
 - Updating `vm_size` after creation triggers an AKS-managed rolling resize of the default agent pool. Ensure the subscription has quota for temporary surge capacity and that workloads can tolerate node rotation.
+- On an AKS Automatic cluster this block is ignored, because `default_agent_pool_enabled` defaults to `false` there and AKS manages the system node pool itself.
 
 Type:
 
@@ -1053,6 +1054,21 @@ object({
 
 Default: `{}`
 
+### <a name="input_default_agent_pool_enabled"></a> [default\_agent\_pool\_enabled](#input\_default\_agent\_pool\_enabled)
+
+Description: Whether this module manages the cluster's default agent pool - the `agentPoolProfiles` entry of the create request, and the follow-up write to the agent pool child resource that keeps it up to date.
+
+Leave this unset to let the SKU decide, which is what you want in nearly every case:
+
+- On an AKS Automatic cluster the default is `false`. AKS provisions, scales and patches the system node pool itself and creates every workload node pool through node autoprovisioning, so a default agent pool sent from here only adds a `systempool` next to the one AKS already runs.
+- On every other SKU the default is `true`, because a cluster with no system pool of its own has nowhere to run.
+
+Set it to `true` on an Automatic cluster only to keep managing a `systempool` that an earlier version of this module created; set it to `false` elsewhere only if the pool is managed outside this module.
+
+Type: `bool`
+
+Default: `null`
+
 ### <a name="input_diagnostic_settings"></a> [diagnostic\_settings](#input\_diagnostic\_settings)
 
 Description:   A map of diagnostic settings to create on the Key Vault. The map key is deliberately arbitrary to avoid issues where map keys maybe unknown at plan time.
@@ -1160,11 +1176,13 @@ Default: `null`
 
 ### <a name="input_hosted_system_profile"></a> [hosted\_system\_profile](#input\_hosted\_system\_profile)
 
-Description: Hosted system profile for the managed cluster. Used by AKS Automatic clusters provisioned into a customer-owned (BYO) virtual network to declare the subnets that the hosted system components use.
+Description: Hosted system profile for the managed cluster. AKS then runs the cluster's system components on a system node pool it provisions, scales and patches itself, rather than on one in your subscription - and no `systempool` is created for you to manage.
 
 - `enabled` - Whether to enable the hosted system profile.
-- `node_subnet_id` - Resource ID of the subnet to be used for user/workload nodes. Required when `enabled` is true.
-- `system_node_subnet_id` - Resource ID of the subnet to be used for system node pools. Required when `enabled` is true.
+- `node_subnet_id` - Resource ID of the subnet to be used for user/workload nodes. Set it on a cluster in an existing (BYO) virtual network, alongside `system_node_subnet_id`; leave it null on a cluster using the network AKS manages.
+- `system_node_subnet_id` - Resource ID of the subnet to be used for system node pools. It must be a different subnet from `node_subnet_id`, and the two are set or left null together.
+
+This is a creation-time setting: Azure will not turn it on or off on a cluster that already exists.
 
 This property is only honored by AKS Automatic clusters (`sku.name == "Automatic"`); it is ignored for standard clusters.
 
