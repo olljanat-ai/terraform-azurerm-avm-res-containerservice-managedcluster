@@ -1,5 +1,6 @@
 module "default_agent_pool_data" {
   source = "./modules/agentpool"
+  count  = local.manage_default_agent_pool ? 1 : 0
 
   name                          = var.default_agent_pool.name
   parent_id                     = "" # As we are outputting data only, parent_id is not required
@@ -66,13 +67,13 @@ module "default_agent_pool_data" {
 resource "azapi_update_resource" "default_agent_pool" {
   count = local.manage_default_agent_pool ? 1 : 0
 
-  name      = module.default_agent_pool_data.name
+  name      = one(module.default_agent_pool_data[*].name)
   parent_id = azapi_resource.this.id
   type      = "Microsoft.ContainerService/managedClusters/agentpools@2026-01-02-preview"
   body = {
     properties = merge(
       {
-        for k, v in module.default_agent_pool_data.body_properties : k => v if v != null && k != "nodeInitializationTaints" && !contains(["gpuProfile", "kubeletConfig", "localDNSProfile", "securityProfile", "upgradeSettings", "upgradeSettingsBlueGreen"], k)
+        for k, v in local.default_agent_pool_body_properties : k => v if v != null && k != "nodeInitializationTaints" && !contains(["gpuProfile", "kubeletConfig", "localDNSProfile", "securityProfile", "upgradeSettings", "upgradeSettingsBlueGreen"], k)
       },
       {
         # Strip null-valued attributes from each nested object so they are not sent in the
@@ -83,23 +84,23 @@ resource "azapi_update_resource" "default_agent_pool" {
         # "drainTimeoutInMinutes accept type int32, not type string". Guarding the null case
         # with a ternary preserves each attribute's original type.
         for k, v in {
-          gpuProfile = try(module.default_agent_pool_data.body_properties.gpuProfile, null) == null ? null : {
-            for profile_key, profile_value in module.default_agent_pool_data.body_properties.gpuProfile : profile_key => profile_value if profile_value != null
+          gpuProfile = try(local.default_agent_pool_body_properties.gpuProfile, null) == null ? null : {
+            for profile_key, profile_value in local.default_agent_pool_body_properties.gpuProfile : profile_key => profile_value if profile_value != null
           }
-          kubeletConfig = try(module.default_agent_pool_data.body_properties.kubeletConfig, null) == null ? null : {
-            for profile_key, profile_value in module.default_agent_pool_data.body_properties.kubeletConfig : profile_key => profile_value if profile_value != null
+          kubeletConfig = try(local.default_agent_pool_body_properties.kubeletConfig, null) == null ? null : {
+            for profile_key, profile_value in local.default_agent_pool_body_properties.kubeletConfig : profile_key => profile_value if profile_value != null
           }
-          localDNSProfile = try(module.default_agent_pool_data.body_properties.localDNSProfile, null) == null ? null : {
-            for profile_key, profile_value in module.default_agent_pool_data.body_properties.localDNSProfile : profile_key => profile_value if profile_value != null
+          localDNSProfile = try(local.default_agent_pool_body_properties.localDNSProfile, null) == null ? null : {
+            for profile_key, profile_value in local.default_agent_pool_body_properties.localDNSProfile : profile_key => profile_value if profile_value != null
           }
-          securityProfile = try(module.default_agent_pool_data.body_properties.securityProfile, null) == null ? null : {
-            for profile_key, profile_value in module.default_agent_pool_data.body_properties.securityProfile : profile_key => profile_value if profile_value != null
+          securityProfile = try(local.default_agent_pool_body_properties.securityProfile, null) == null ? null : {
+            for profile_key, profile_value in local.default_agent_pool_body_properties.securityProfile : profile_key => profile_value if profile_value != null
           }
-          upgradeSettings = try(module.default_agent_pool_data.body_properties.upgradeSettings, null) == null ? null : {
-            for profile_key, profile_value in module.default_agent_pool_data.body_properties.upgradeSettings : profile_key => profile_value if profile_value != null
+          upgradeSettings = try(local.default_agent_pool_body_properties.upgradeSettings, null) == null ? null : {
+            for profile_key, profile_value in local.default_agent_pool_body_properties.upgradeSettings : profile_key => profile_value if profile_value != null
           }
-          upgradeSettingsBlueGreen = try(module.default_agent_pool_data.body_properties.upgradeSettingsBlueGreen, null) == null ? null : {
-            for profile_key, profile_value in module.default_agent_pool_data.body_properties.upgradeSettingsBlueGreen : profile_key => profile_value if profile_value != null
+          upgradeSettingsBlueGreen = try(local.default_agent_pool_body_properties.upgradeSettingsBlueGreen, null) == null ? null : {
+            for profile_key, profile_value in local.default_agent_pool_body_properties.upgradeSettingsBlueGreen : profile_key => profile_value if profile_value != null
           }
         } : k => v if try(length(v), 0) > 0
       }
@@ -115,11 +116,16 @@ resource "azapi_update_resource" "default_agent_pool" {
   depends_on = [azapi_update_resource.kubernetes_version]
 }
 
-# The write became countable when the default agent pool stopped being sent for AKS Automatic.
-# Without this, every cluster that already manages one has it destroyed and recreated under the new
-# address. The destroy is harmless - an `azapi_update_resource` performs no operation when it is
-# deleted, and the agent pool it wrote to stays as it is - but the create that follows sends the
-# whole pool body to Azure again for no reason.
+# Both became countable when `default_agent_pool` learned to be null. Without these, every cluster
+# that already manages a default agent pool has it destroyed and recreated under the new address.
+# The destroy is harmless - an `azapi_update_resource` performs no operation when it is deleted, and
+# the agent pool it wrote to stays as it is - but the create that follows sends the whole pool body
+# to Azure again for no reason.
+moved {
+  from = module.default_agent_pool_data
+  to   = module.default_agent_pool_data[0]
+}
+
 moved {
   from = azapi_update_resource.default_agent_pool
   to   = azapi_update_resource.default_agent_pool[0]

@@ -159,8 +159,9 @@ module "automatic" {
     private_dns_zone       = azurerm_private_dns_zone.this.id
     disable_run_command    = true
   }
-  # No default_agent_pool: on an AKS Automatic cluster the system node pool is AKS's own, and the
-  # subnets the cluster uses are named by hosted_system_profile below.
+  # AKS runs this cluster's system node pool itself, so the module manages no default agent pool -
+  # without this it would add a `systempool` next to the one AKS already provisions.
+  default_agent_pool = null
   hosted_system_profile = {
     enabled               = true
     node_subnet_id        = azurerm_subnet.cluster.id

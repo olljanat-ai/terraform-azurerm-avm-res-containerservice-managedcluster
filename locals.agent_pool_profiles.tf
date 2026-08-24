@@ -6,8 +6,13 @@
 # Therefore, we use regex to filter the properties accordingly.
 # The only ternary we use is a string for the regex pattern.
 locals {
+  # The body of the default agent pool, or null when there is none to send - see
+  # `local.manage_default_agent_pool`. Every local below is guarded against that null on its own:
+  # Terraform short-circuits a conditional it evaluates inline, but a local referenced from the
+  # branch it does not take is still a node of the graph and is evaluated anyway.
+  default_agent_pool_body_properties = one(module.default_agent_pool_data[*].body_properties)
   # We only care about the first agent pool. The others are created using child resources.
-  agent_pool_profiles = [
+  agent_pool_profiles = local.agent_pool_profiles_create_body_properties == null ? null : [
     merge(
       {
         for k, v in local.agent_pool_profiles_create_body_properties : k => v if can(regex(local.agent_pool_profiles_regex, k)) && !contains(local.agent_pool_profiles_excluded_properties, k) && k != "securityProfile" && v != null
@@ -32,14 +37,14 @@ locals {
         } : k => v if try(length(v), 0) > 0
       },
       {
-        name = module.default_agent_pool_data.name
+        name = one(module.default_agent_pool_data[*].name)
       }
     )
   ]
-  agent_pool_profiles_create_body_properties = merge(
-    module.default_agent_pool_data.body_properties,
+  agent_pool_profiles_create_body_properties = local.default_agent_pool_body_properties == null ? null : merge(
+    local.default_agent_pool_body_properties,
     {
-      count = local.is_automatic ? var.default_agent_pool.count_of : module.default_agent_pool_data.body_properties.count
+      count = local.is_automatic ? var.default_agent_pool.count_of : local.default_agent_pool_body_properties.count
     }
   )
   agent_pool_profiles_excluded_properties = [

@@ -99,6 +99,9 @@ module "automatic" {
     }
   }
   alert_email = "test@example.com"
+  # AKS runs this cluster's system node pool itself, so the module manages no default agent pool -
+  # without this it would add a `systempool` next to the one AKS already provisions.
+  default_agent_pool = null
   maintenanceconfiguration = {
     aksManagedAutoUpgradeSchedule = {
       name = "aksManagedAutoUpgradeSchedule"

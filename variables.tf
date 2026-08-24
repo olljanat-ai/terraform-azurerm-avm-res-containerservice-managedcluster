@@ -539,29 +539,14 @@ Note that:
 - It is not supported to rename the default agent pool after creation.
 - `artifact_streaming_profile` configures artifact streaming on the default agent pool.
 - Updating `vm_size` after creation triggers an AKS-managed rolling resize of the default agent pool. Ensure the subscription has quota for temporary surge capacity and that workloads can tolerate node rotation.
-- On an AKS Automatic cluster this block is ignored, because `default_agent_pool_enabled` defaults to `false` there and AKS manages the system node pool itself.
+
+Set this to `null` to have the module manage no default agent pool at all - neither the `agentPoolProfiles` entry of the create request nor the follow-up write to the agent pool child resource. That is what an AKS Automatic cluster wants: AKS provisions, scales and patches its system node pool itself and creates every workload node pool through node autoprovisioning, so a default agent pool sent from here only adds a `systempool` next to the one AKS already runs. A cluster on any other SKU has nowhere to run without one.
 DESCRIPTION
-  nullable    = false
 
   validation {
     condition     = try(var.default_agent_pool.kubelet_config == null || var.default_agent_pool.kubelet_config.seccomp_default == null, true)
     error_message = "default_agent_pool.kubelet_config.seccomp_default is not supported because the managedClusters parent API rejects it and the default agent pool child API treats kubelet configuration as immutable after creation. Use agent_pools[*].kubelet_config.seccomp_default for user pools."
   }
-}
-
-variable "default_agent_pool_enabled" {
-  type        = bool
-  default     = null
-  description = <<DESCRIPTION
-Whether this module manages the cluster's default agent pool - the `agentPoolProfiles` entry of the create request, and the follow-up write to the agent pool child resource that keeps it up to date.
-
-Leave this unset to let the SKU decide, which is what you want in nearly every case:
-
-- On an AKS Automatic cluster the default is `false`. AKS provisions, scales and patches the system node pool itself and creates every workload node pool through node autoprovisioning, so a default agent pool sent from here only adds a `systempool` next to the one AKS already runs.
-- On every other SKU the default is `true`, because a cluster with no system pool of its own has nowhere to run.
-
-Set it to `true` on an Automatic cluster only to keep managing a `systempool` that an earlier version of this module created; set it to `false` elsewhere only if the pool is managed outside this module.
-DESCRIPTION
 }
 
 variable "diagnostic_settings" {

@@ -426,6 +426,8 @@ DESCRIPTION
 
   validation {
     error_message = "The name must not be the same as the default agent pool name."
-    condition     = alltrue([for k, v in var.agent_pools : v.name != var.default_agent_pool.name])
+    # try() rather than a comparison: `default_agent_pool` may be null, meaning the module manages
+    # no default agent pool, and then there is no name for a user pool to collide with.
+    condition = alltrue([for k, v in var.agent_pools : v.name != try(var.default_agent_pool.name, null)])
   }
 }
